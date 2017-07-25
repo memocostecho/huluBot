@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const express = require('express');
 const fetch = require('node-fetch');
 const request = require('request');
+//var firebase = require("firebase");
 
 let Wit = null;
 let log = null;
@@ -30,6 +31,15 @@ try {
   log = require('node-wit').log;
 }
 
+/*firebase.initializeApp({
+  serviceAccount: "/Users/guillermo.rosales/wit/node-wit/examples/devcircles-958a5a12a499.json",
+  databaseURL: "https://dev-circles.firebaseio.com"
+});*/
+
+//var db = firebase.database();
+//var ref = db.ref("/some_resource");
+
+var recipientIdGlobal;
 // Webserver parameter
 const PORT = process.env.PORT || 8445;
 
@@ -44,7 +54,7 @@ if (!FB_PAGE_TOKEN) { throw new Error('missing FB_PAGE_TOKEN') }
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
 if (!FB_APP_SECRET) { throw new Error('missing FB_APP_SECRET') }
 
-let FB_VERIFY_TOKEN = null;
+let FB_VERIFY_TOKEN = "holaMemo";
 crypto.randomBytes(8, (err, buff) => {
   if (err) throw err;
   FB_VERIFY_TOKEN = buff.toString('hex');
@@ -58,10 +68,20 @@ crypto.randomBytes(8, (err, buff) => {
 // https://developers.facebook.com/docs/messenger-platform/send-api-reference
 
 const fbMessage = (id, text) => {
-  const body = JSON.stringify({
+  var body ={};
+  if(text.attachment!=undefined){
+      body = JSON.stringify({
+      recipient: { id },
+      message: text ,
+    });
+  }else{
+    body = JSON.stringify({
     recipient: { id },
-    message: { text },
+    message: {text} ,
   });
+  }
+  console.log("enviando algo a "+id)
+  console.log("BODY: "+body)
   const qs = 'access_token=' + encodeURIComponent(FB_PAGE_TOKEN);
   return fetch('https://graph.facebook.com/me/messages?' + qs, {
     method: 'POST',
@@ -99,7 +119,20 @@ const findOrCreateSession = (fbid) => {
     sessionId = new Date().toISOString();
     sessions[sessionId] = {fbid: fbid, context: {}};
   }
+  recipientIdGlobal = fbid;
   return sessionId;
+};
+
+const firstEntityValue = (entities, entity) => {
+  const val = entities && entities[entity] &&
+    Array.isArray(entities[entity]) &&
+    entities[entity].length > 0 &&
+    entities[entity][0].value
+  ;
+  if (!val) {
+    return null;
+  }
+  return typeof val === 'object' ? val.value : val;
 };
 
 // Our bot actions
@@ -127,7 +160,207 @@ const actions = {
       // Giving the wheel back to our bot
       return Promise.resolve()
     }
-  },
+  },getForecast({context, entities}) {
+    return new Promise(function(resolve, reject) {
+      var location = firstEntityValue(entities, 'location')
+      if (location) {
+
+        var forecastApi = "http://api.openweathermap.org/data/2.5/weather?q="+location+"&appid=b08af3eb64583fdc80eefb9db32d8929"
+
+        request(forecastApi, function(error, response, body) {
+          //console.log(response);
+          var JSONResponse = JSON.parse(body)
+          console.log("RESPONSE:" + JSONResponse.weather[0].description);
+          context.forecast = JSONResponse.weather[0].description +" in "+location//response.weather[0].description; // we should call a weather API here
+          return resolve(context);
+        });
+        //context.forecast = "Consulting in "+ location
+        delete context.missingLocation;
+      } else {
+        context.missingLocation = true;
+        delete context.forecast;
+        return resolve(context);
+      }
+    });
+  },getCircles({context, entities}) {
+    return new Promise(function(resolve, reject) {
+      console.log(("CONTEXT: " + context))
+      context.circles = "test";
+      var template = {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "generic",
+          elements: [{
+            title: "Mexico",
+            subtitle: "Dev circle Ciudad de Mexico",
+            item_url: "https://www.facebook.com/groups/DevCCiudaddeMexico/?fref=ts",
+            image_url: "http://1.bp.blogspot.com/-Sd1OnZ4ceTw/Vdd_wlO7NYI/AAAAAAAAL7Q/moxbVS8rLGc/s1600/x29.jpg",
+            buttons: [{
+              type: "web_url",
+              url: "https://www.oculus.com/en-us/rift/",
+              title: "Subscribe"
+            }, {
+              type: "postback",
+              title: "More info",
+              payload: "Payload for first bubble",
+            }],
+          }, {
+            title: "Manila",
+            subtitle: "Dev circle Manila",
+            item_url: "https://www.oculus.com/en-us/touch/",
+            image_url: "https://scontent.fsnc1-1.fna.fbcdn.net/v/t1.0-9/13516301_10101079257635851_5071947382654109237_n.png?oh=4fbcf44c5bc0718ca6b24b59e51f7fda&oe=58324EE3",
+            buttons: [{
+              type: "web_url",
+              url: "https://www.oculus.com/en-us/touch/",
+              title: "Open Web URL"
+            }, {
+              type: "postback",
+              title: "Call Postback",
+              payload: "Payload for second bubble",
+            }]
+          }]
+        }
+      }
+  };
+  return fbMessage(recipientIdGlobal, template)
+  .then(() => null)
+  //return resolve(context);
+    });
+  },play({context, entities}) {
+    return new Promise(function(resolve, reject) {
+      console.log(("CONTEXT: " + context))
+      context.show_movie = "test";
+      var show_movie = firstEntityValue(entities, 'show_movie')
+      console.log(("show_movie: " + show_movie))
+      if( show_movie == "terminator") {
+
+      var template = {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "generic",
+          elements: [{
+            title: "Terminator Genisys",
+            subtitle: "(2015)",
+            item_url: "http://www.hulu.com/watch-mobile/958003",
+            image_url: "http://images.techtimes.com/data/images/full/253926/hulu-july-2016-the-complete-list-of-movies-and-tv-shows-available-to-stream.png",
+            buttons: [{
+              type: "web_url",
+              url: "http://www.hulu.com/watch-mobile/958003",
+              title: "Watch"
+            }, {
+              type: "postback",
+              title: "Rate this movie",
+              payload: "Rating this movie",
+            }],
+          }]
+        }
+      }
+  };
+}else{
+
+
+  var template = {
+  attachment: {
+    type: "template",
+    payload: {
+      template_type: "generic",
+      elements: [{
+        title: "Family guy",
+        subtitle: "(2010)",
+        item_url: "http://www.hulu.com/watch-mobile/7161",
+        image_url: "http://ib1.huluim.com/show_key_art/54?size=1600x600&region=US",
+        buttons: [{
+          type: "web_url",
+          url: "http://www.hulu.com/watch-mobile/958003",
+          title: "Watch"
+        }, {
+          type: "postback",
+          title: "Rate this show",
+          payload: "Rating this show",
+        }],
+      }]
+    }
+  }
+};
+
+
+
+}
+  return fbMessage(recipientIdGlobal, template)
+  .then(() => null)
+    });
+  },help({context, entities}) {
+    return new Promise(function(resolve, reject) {
+
+      context.helptext = "1. Recommend you a movie or show \n -Recommend me a movie/show \n 2.  Play a movie or show for you \n -Play Adeline \n -Play The path \n -Open app \n 3.  Helping you deciding your plan \n 4.  Listen to you if you have any issue with the product/account"
+      return resolve(context);
+
+    });
+  },recommend({context, entities}) {
+    return new Promise(function(resolve, reject) {
+      console.log(("CONTEXT: " + context))
+      context.circles = "test";
+      var template = {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "generic",
+          elements: [{
+            title: "Adeline",
+            subtitle: "(2015)",
+            item_url: "hulu://videos/786878",
+            image_url: "http://ib4.huluim.com/movie/60709591?size=220x318&region=us&fallback_to_the_invisible=1&region=us",
+            buttons: [{
+              type: "web_url",
+              url: "hulu://videos/786878",
+              title: "Watch"
+            }, {
+              type: "postback",
+              title: "Rate this movie",
+              payload: "Rate this movie",
+            }],
+          }, {
+            title: "The republic of love",
+            subtitle: "(2003)",
+            item_url: "http://www.hulu.com/videos/104578",
+            image_url: "http://ib4.huluim.com/movie/50010223?size=220x318&region=us&fallback_to_the_invisible=1&region=us",
+            buttons: [{
+              type: "web_url",
+              url: "http://www.hulu.com/videos/104578",
+              title: "Watch"
+            }, {
+              type: "postback",
+              title: "Rate this movie",
+              payload: "Payload for second bubble",
+            }]
+          }, {
+            title: "The Lovers",
+            subtitle: "(1958)",
+            item_url: "http://www.hulu.com/watch-mobile/254698",
+            image_url: "http://ib3.huluim.com/movie/40008318?size=220x318&region=us&fallback_to_the_invisible=1&region=us",
+            buttons: [{
+              type: "web_url",
+              url: "http://www.hulu.com/watch-mobile/254698",
+              title: "Watch"
+            }, {
+              type: "postback",
+              title: "Rate this movie",
+              payload: "Payload for second bubble",
+            }]
+          }
+
+        ]
+        }
+      }
+  };
+  return fbMessage(recipientIdGlobal, template)
+  .then(() => null)
+  //return resolve(context);
+    });
+  }
+
   // You should implement your custom actions here
   // See https://wit.ai/docs/quickstart
 };
@@ -252,6 +485,7 @@ function verifyRequestSignature(req, res, buf) {
     }
   }
 }
+
 
 app.listen(PORT);
 console.log('Listening on :' + PORT + '...');
